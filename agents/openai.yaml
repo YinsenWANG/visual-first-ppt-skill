@@ -1,0 +1,4 @@
+interface:
+  display_name: "Visual-first PPT · 视觉优先演示"
+  short_description: "制作、增补与美化演示文稿，结合原创插画、原生图表、讲师备注和逐页质检"
+  default_prompt: "使用 $visual-first-ppt，根据我的资料制作或改进演示文稿，兼顾知识深度、视觉表达与可编辑性，并完成渲染检查。"
