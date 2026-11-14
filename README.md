@@ -1,4 +1,6 @@
-# Visual-first PPT Skill
+# VFPS · Visual-first PPT Skill
+
+简称 **VFPS**，中文为“视觉优先演示文稿”。
 
 一套可复用的演示文稿制作 Skill，适用于课程、演讲、技术分享、产品介绍、路演与汇报。支持从资料新建、沿用风格增补知识，以及表格和局部版式优化。
 
