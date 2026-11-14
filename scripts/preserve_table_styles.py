@@ -13,6 +13,7 @@ import json
 import posixpath
 import re
 import sys
+from urllib.parse import unquote, urlsplit
 from pathlib import Path
 from zipfile import ZipFile, BadZipFile
 import xml.etree.ElementTree as ET
@@ -36,18 +37,40 @@ def xml(zip_file, part):
     return ET.fromstring(zip_file.read(part))
 
 
+def resolve_target(owner, target):
+    uri = urlsplit(target)
+    require(not uri.scheme and not uri.netloc and not uri.query and not uri.fragment,
+            "Unsupported internal relationship target: " + target)
+    path = unquote(uri.path)
+    require(path and "\\" not in path, "Invalid internal relationship target")
+    part = (posixpath.normpath(path.lstrip("/")) if path.startswith("/") else
+            posixpath.normpath(posixpath.join(posixpath.dirname(owner), path)))
+    require(part not in (".", "..") and not part.startswith("../"),
+            "Relationship escapes package")
+    return part
+
+
+def relationships(zip_file, owner):
+    part = posixpath.join(posixpath.dirname(owner), "_rels",
+                          posixpath.basename(owner) + ".rels")
+    if part not in zip_file.namelist():
+        return {}
+    result = {}
+    for rel in xml(zip_file, part):
+        key = rel.attrib["Id"]
+        require(key not in result, "Duplicate relationship ID: " + part)
+        result[key] = rel
+    return result
+
+
 def slide_parts(zip_file):
-    rels = {r.attrib["Id"]: r for r in xml(
-        zip_file, "ppt/_rels/presentation.xml.rels"
-    )}
+    rels = relationships(zip_file, "ppt/presentation.xml")
     parts = []
     for item in xml(zip_file, "ppt/presentation.xml").findall("p:sldIdLst/p:sldId", NS):
         rel = rels[item.attrib["{" + NS["r"] + "}id"]]
         require(rel.get("TargetMode") != "External", "External slide relationship")
         require(rel.get("Type", "").endswith("/slide"), "Invalid slide relationship")
-        target = rel.attrib["Target"]
-        part = (target.lstrip("/") if target.startswith("/")
-                else posixpath.normpath(posixpath.join("ppt", target)))
+        part = resolve_target("ppt/presentation.xml", rel.attrib["Target"])
         require(part.startswith("ppt/") and part in zip_file.namelist(), "Invalid slide part")
         parts.append(part)
     require(len(parts) == len(set(parts)), "Duplicate slide parts are unsupported")
@@ -64,8 +87,42 @@ def styles(zip_file):
     part = "ppt/tableStyles.xml"
     if part not in zip_file.namelist():
         return {}
-    return {s.attrib["styleId"].upper(): structural_value(s)
-            for s in xml(zip_file, part).findall("a:tblStyle", NS)}
+    result = {}
+    for style in xml(zip_file, part).findall("a:tblStyle", NS):
+        key = style.attrib["styleId"].upper()
+        require(key not in result, "Duplicate table style ID")
+        check_relationship_dependencies(style)
+        result[key] = structural_value(style)
+    return result
+
+
+def style_default(zip_file):
+    part = "ppt/tableStyles.xml"
+    return xml(zip_file, part).get("def", "").upper() if part in zip_file.namelist() else ""
+
+
+def theme_context(zip_file, slide):
+    """Compare the actual inheritance chain, not filenames or theme IDs."""
+    result, seen = [], set()
+    current = slide
+    for relation in ("slideLayout", "slideMaster", "theme", None):
+        require(current not in seen, "Cyclic layout/theme relationship")
+        seen.add(current)
+        root = xml(zip_file, current)
+        if relation is None:
+            result.append(structural_value(root))
+            break
+        result.append(tuple(structural_value(child) for child in root
+                            if child.tag in {"{" + NS["p"] + "}" + name
+                                             for name in ("clrMap", "clrMapOvr", "txStyles")}))
+        links = [r for r in relationships(zip_file, current).values()
+                 if r.get("Type", "").endswith("/" + relation)]
+        require(len(links) <= 1, "Ambiguous layout/theme relationship")
+        if not links:
+            break
+        require(links[0].get("TargetMode") != "External", "External layout/theme")
+        current = resolve_target(current, links[0].attrib["Target"])
+    return tuple(result)
 
 
 def table_signature(table):
@@ -74,6 +131,8 @@ def table_signature(table):
     for row in table.findall("a:tr", NS):
         cells = []
         for cell in row.findall("a:tc", NS):
+            require(all(cell.get(key, "0") in ("0", "1", "false", "true")
+                        for key in ("hMerge", "vMerge")), "Invalid merge boolean")
             paragraphs = []
             for paragraph in cell.findall("a:txBody/a:p", NS):
                 pieces = []
@@ -91,11 +150,17 @@ def table_signature(table):
     return grid, tuple(rows)
 
 
-def check_dependencies(table, source_styles, donor_styles):
+def check_relationship_dependencies(table):
     for element in table.iter():
         require(not any(key.startswith("{" + NS["r"] + "}") for key in element.attrib),
                 "Table has relationship dependencies; use a relationship-aware editor")
         require(element.tag != "{" + NS["a"] + "}blip", "Picture table is unsupported")
+        require(element.tag != "{" + NS["a"] + "}fld",
+                "Dynamic table fields are unsupported; cached text is not field semantics")
+
+
+def check_dependencies(table, source_styles, donor_styles):
+    check_relationship_dependencies(table)
     for style in table.findall("a:tblPr/a:tableStyleId", NS):
         key = (style.text or "").strip().upper()
         require(key in source_styles and key in donor_styles,
@@ -138,14 +203,26 @@ def transplant(source, styled, selected, output, report=None):
             require(len(old_tables) > 0, f"No native table on slide {index}")
             require(len(old_tables) == len(new_tables) == len(old_raw) == len(new_raw),
                     f"Table count or XML prefix mismatch on slide {index}; expected a:tbl")
+            require(theme_context(original, part) == theme_context(donor, donor_part),
+                    f"Theme or color-map inheritance changed on slide {index}")
             for number, (old, new) in enumerate(zip(old_tables, new_tables), 1):
                 require(table_signature(old) == table_signature(new),
                         f"Text, merge, row/column geometry changed: slide {index}, table {number}")
                 check_dependencies(old, source_styles, source_styles)
                 check_dependencies(new, source_styles, donor_styles)
+                if new.find("a:tblPr/a:tableStyleId", NS) is None:
+                    key = style_default(donor)
+                    require(key == style_default(original), "Default table style changed")
+                    if key:
+                        require(key in source_styles and key in donor_styles and
+                                source_styles[key] == donor_styles[key],
+                                "Default table style definition missing or changed")
             replacements = iter(new_raw)
             patched = TABLE.sub(lambda _: next(replacements), before)
-            ET.fromstring(patched)
+            parsed_tables = ET.fromstring(patched).findall(".//a:tbl", NS)
+            require([structural_value(t) for t in parsed_tables] ==
+                    [structural_value(t) for t in new_tables],
+                    "Namespace context changed donor table semantics")
             require(TABLE.sub(b"<TABLE/>", before) == TABLE.sub(b"<TABLE/>", patched),
                     "Non-table content changed")
             patches[part] = patched
@@ -182,9 +259,19 @@ def transplant(source, styled, selected, output, report=None):
                 "render_check_performed": False,
                 "sha256": hashlib.sha256(output.read_bytes()).hexdigest()}
     if report:
-        with report.open("x", encoding="utf-8") as stream:
-            json.dump(evidence, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
+        report_created = False
+        try:
+            with report.open("x", encoding="utf-8") as stream:
+                report_created = True
+                json.dump(evidence, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+        except Exception:
+            # Do not leave a success-looking deliverable after a failed run, or
+            # remove a report another process created after preflight.
+            if report_created:
+                report.unlink(missing_ok=True)
+            output.unlink(missing_ok=True)
+            raise
     return evidence
 
 

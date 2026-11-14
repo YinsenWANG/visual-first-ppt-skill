@@ -6,6 +6,7 @@
 presentation:
   action: "create | enrich | restyle"
   input_version: "最新批准的 PPTX 或来源版本"
+  source_sha256: null  # 文件输入的版本指纹；会话使用稳定引用及状态版本
   title: ""
   objective: "听完希望观众知道/相信/采取的行动"
   audience: ""
@@ -19,6 +20,10 @@ presentation:
 visual:
   style: "modern_flat_vector | brand_guided | custom"
   reference_images: []
+  approved_visual_baseline: null  # 满意样稿，与最新内容来源分开记录
+  style_anchors: []  # 封面、章节、关系图、表格、插画等实际参考页
+  fixed_visual_traits: []  # 从样稿提取的字级、位置、色彩角色、构图与插画尺度
+  allowed_variations: []  # 主题需要变化的场景、图结构与截图布局
   palette: "auto"
   imagegen: "proactive_when_useful"
   imagegen_intensity: "balanced"  # restrained | balanced | illustration_rich
@@ -36,17 +41,20 @@ constraints:
 | 字段 | 填写提示 |
 |---|---|
 | 编号 | 例如 08 |
+| 稳定键与来源页 | 例如 meeting-demo / 原稿 24 → 最终 24；样板临时页序另记 |
 | 章节 | 例如 02 / 案例验证 |
 | 页面角色 | 封面 / 章节 / 观点 / 对比 / 架构 / 流程 / 数据 / Demo / 总结 / 封底 |
 | 核心结论 | 完整的一句话，观众应记住什么 |
 | 屏幕文字 | 精简后的可见内容；现场模式尽量只留一行观点与少量标签 |
 | 主要视觉 | ImageGen 插画 / 原生图表 / 真实截图 / 可编辑流程 / 问题页 |
 | 视觉结构 | 例如左标题+右图、全屏结构图、上下布局 |
+| 关系与参考 | 要表达顺序、组成、差异还是判断；对应哪张风格基准页 |
 | 讲解备注 | 概念、背景、例子、误区和过渡 |
 | 时间 | 预计讲授/展示时长 |
 | 数据依据 | 资料文件、用户明确提供的事实或注明示意数据 |
 | 本页教学任务 | 理解原理 / 做出选择 / 执行步骤 / 定位异常 / 验收结果 |
 | 覆盖来源 | 此页及 Notes 补足了原始资料中的哪些重要知识 |
+| 保留与验收 | 原样表格、完整指令、Notes、截图；术语、数字、单位和前提的来源 |
 
 ## C. 短页数演示与完整课件的结构区别
 

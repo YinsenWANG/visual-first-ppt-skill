@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -189,6 +190,96 @@ class PreserveTableStylesTests(unittest.TestCase):
         self.assertIn("Refused:", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
         self.assertFalse(self.output.exists())
+
+    def test_dynamic_field_with_same_cached_text_is_rejected(self):
+        donor = self.root / "field.pptx"
+        rewrite_deck(self.donor, donor, "ppt/slides/slide1.xml", lambda b: b.replace(
+            b'<a:r><a:t>A</a:t></a:r>', b'<a:fld id="x" type="datetime"><a:t>A</a:t></a:fld>'))
+        with self.assertRaisesRegex(ValueError, "Dynamic"):
+            HELPER.transplant(self.source, donor, [1], self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_inherited_namespace_cannot_silently_change_meaning(self):
+        # The same prefix resolves differently in the two slide roots. Copying
+        # only a:tbl is syntactically valid but would reinterpret donor markup.
+        source = self.root / "ns-source.pptx"
+        donor = self.root / "ns-donor.pptx"
+        rewrite_deck(self.source, source, "ppt/slides/slide1.xml", lambda b: b.replace(
+            b'<p:sld ', b'<p:sld xmlns:x="urn:old" '))
+        rewrite_deck(self.donor, donor, "ppt/slides/slide1.xml", lambda b: b.replace(
+            b'<p:sld ', b'<p:sld xmlns:x="urn:new" ').replace(b'<a:tblPr>', b'<a:tblPr x:mode="1">'))
+        with self.assertRaisesRegex(ValueError, "Namespace"):
+            HELPER.transplant(source, donor, [1], self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_changed_color_map_is_rejected(self):
+        donor = self.root / "color-map.pptx"
+        rewrite_deck(self.donor, donor, "ppt/slides/slide1.xml", lambda b: b.replace(
+            b'</p:sld>', b'<p:clrMapOvr><a:overrideClrMapping accent1="accent2"/></p:clrMapOvr></p:sld>'))
+        with self.assertRaisesRegex(ValueError, "inheritance"):
+            HELPER.transplant(self.source, donor, [1], self.output)
+
+    def test_implicit_default_style_is_checked(self):
+        source = self.root / "implicit-source.pptx"
+        donor = self.root / "implicit-donor.pptx"
+        changed = self.root / "changed-default.pptx"
+        remove = lambda b: b.replace(f'<a:tableStyleId>{STYLE}</a:tableStyleId>'.encode(), b'')
+        rewrite_deck(self.source, source, "ppt/slides/slide1.xml", remove)
+        rewrite_deck(self.donor, donor, "ppt/slides/slide1.xml", remove)
+        rewrite_deck(donor, changed, "ppt/tableStyles.xml", lambda b: b.replace(
+            ('def="' + STYLE + '"').encode(), b'def="other"'))
+        with self.assertRaisesRegex(ValueError, "Default table style"):
+            HELPER.transplant(source, changed, [1], self.output)
+
+    def test_style_definition_relationships_are_rejected(self):
+        donor = self.root / "style-link.pptx"
+        rewrite_deck(self.donor, donor, "ppt/tableStyles.xml", lambda b: b.replace(
+            b'<a:tblStyleLst ', f'<a:tblStyleLst xmlns:r="{R}" '.encode()).replace(
+            b'styleName="Neutral"', b'styleName="Neutral" r:embed="image"'))
+        with self.assertRaisesRegex(ValueError, "relationship"):
+            HELPER.transplant(self.source, donor, [1], self.output)
+
+    def test_invalid_merge_boolean_is_rejected(self):
+        donor = self.root / "invalid-merge.pptx"
+        rewrite_deck(self.donor, donor, "ppt/slides/slide1.xml", lambda b: b.replace(
+            b'<a:tc>', b'<a:tc hMerge="invalid">', 1))
+        with self.assertRaisesRegex(ValueError, "merge boolean"):
+            HELPER.transplant(self.source, donor, [1], self.output)
+
+    def test_report_write_failure_cleans_partial_outputs(self):
+        report = self.root / "failed-report.json"
+        with patch.object(HELPER.json, 'dump', side_effect=OSError('disk full')):
+            with self.assertRaisesRegex(OSError, 'disk full'):
+                HELPER.transplant(self.source, self.donor, [1], self.output, report)
+        self.assertFalse(report.exists())
+        self.assertFalse(self.output.exists())
+        self.assertTrue(self.source.exists())
+        self.assertTrue(self.donor.exists())
+
+    def test_theme_chain_is_compared_by_content_not_part_names(self):
+        def with_theme(base, target, suffix, color):
+            with ZipFile(base) as src, ZipFile(target, 'x') as out:
+                for info in src.infolist():
+                    out.writestr(copy.copy(info), src.read(info.filename))
+                owner = 'ppt/slides/slide1.xml'
+                for name, next_part, kind in [
+                    (owner, 'ppt/slideLayouts/layout'+suffix+'.xml', 'slideLayout'),
+                    ('ppt/slideLayouts/layout'+suffix+'.xml', 'ppt/slideMasters/master'+suffix+'.xml', 'slideMaster'),
+                    ('ppt/slideMasters/master'+suffix+'.xml', 'ppt/theme/theme'+suffix+'.xml', 'theme'),
+                ]:
+                    relpath = HELPER.posixpath.join(HELPER.posixpath.dirname(name), '_rels', HELPER.posixpath.basename(name)+'.rels')
+                    out.writestr(relpath, f'<Relationships xmlns="{PR}"><Relationship Id="r1" Type="{R}/{kind}" Target="/{next_part}"/></Relationships>')
+                    if kind != 'theme':
+                        out.writestr(next_part, f'<p:holder xmlns:p="{P}"/>')
+                    else:
+                        out.writestr(next_part, f'<a:theme xmlns:a="{A}"><a:themeElements><a:clrScheme><a:accent1><a:srgbClr val="{color}"/></a:accent1></a:clrScheme></a:themeElements></a:theme>')
+        source, donor, bad = [self.root / n for n in ('theme-source.pptx', 'theme-donor.pptx', 'theme-bad.pptx')]
+        with_theme(self.source, source, '1', '123456')
+        with_theme(self.donor, donor, '2', '123456')
+        with_theme(self.donor, bad, '3', 'ABCDEF')
+        with self.assertRaisesRegex(ValueError, 'inheritance'):
+            HELPER.transplant(source, bad, [1], self.output)
+        HELPER.transplant(source, donor, [1], self.output)
 
 
 if __name__ == "__main__":
