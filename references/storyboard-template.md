@@ -25,7 +25,7 @@ visual:
   fixed_visual_traits: []  # 从样稿提取的字级、位置、色彩角色、构图与插画尺度
   allowed_variations: []  # 主题需要变化的场景、图结构与截图布局
   palette: "auto"
-  imagegen: "proactive_when_useful"
+  imagegen: "generate_for_current_content"  # 每次按内容生成所需插图，不使用固定图库
   imagegen_intensity: "balanced"  # restrained | balanced | illustration_rich
 constraints:
   mandatory_content: []
@@ -47,6 +47,7 @@ constraints:
 | 核心结论 | 完整的一句话，观众应记住什么 |
 | 屏幕文字 | 精简后的可见内容；现场模式尽量只留一行观点与少量标签 |
 | 主要视觉 | ImageGen 插画 / 原生图表 / 真实截图 / 可编辑流程 / 问题页 |
+| 插图生成记录 | 当前内容意图 + Skill 风格提示词 + 本次 ImageGen 结果；参考图只作风格依据 |
 | 视觉结构 | 例如左标题+右图、全屏结构图、上下布局 |
 | 关系与参考 | 要表达顺序、组成、差异还是判断；对应哪张风格基准页 |
 | 讲解备注 | 概念、背景、例子、误区和过渡 |

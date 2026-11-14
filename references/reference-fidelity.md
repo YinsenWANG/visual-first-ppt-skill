@@ -20,7 +20,7 @@
 
 ## FDE 参考档案
 
-这是一套已认可课件的具体风格，不是所有演示文稿的硬性标准。参考 [封面](../assets/slide-examples/cover.png)、[流程](../assets/slide-examples/workflow.png)、[表格](../assets/slide-examples/table.png) 和 [章节](../assets/slide-examples/divider.png)。下列坐标按 1280 × 720 画布描述，其他尺寸同比换算。
+这是一套已认可课件的具体风格，不是所有演示文稿的硬性标准。参考 [封面](../assets/slide-examples/cover.png)、[流程](../assets/slide-examples/workflow.png)、[表格](../assets/slide-examples/table.png) 和 [章节](../assets/slide-examples/divider.png)。这些文件仅用于对照风格与构图，其中插画不作为新课件的固定素材；新插图按当前内容调用 ImageGen 生成。下列坐标按 1280 × 720 画布描述，其他尺寸同比换算。
 
 | 项目 | FDE 参考特征 |
 | --- | --- |

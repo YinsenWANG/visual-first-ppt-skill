@@ -26,7 +26,7 @@
 
 - **教学深度**：原始资料与嵌入表格建立覆盖对照；重要知识进入页面、Notes 或演示。关键推理不能全部藏进备注。
 - **参考防漂移**：将满意样稿与内容来源分开，提取实测视觉参数；代表页同尺寸并排检查，避免关系图退化为说明条、截图固定搭配三段文字。
-- **视觉表达**：ImageGen 用于人物和场景；文字、数字、架构、流程和表格采用原生组件。已认可插画在增补时优先复用。
+- **视觉表达**：每次按课件内容调用 ImageGen，使用 Skill 的风格生成所需插图；参考图片不作为固定图库。文字、数字、架构、流程和表格采用原生组件。
 - **现代图表**：浅色表头、细横线、深色语义强调；检查旧表格主题带来的隐藏网格和色带。
 - **局部修改**：保留最新批准稿的其他内容；样式导出有副作用时可用受限的原生表格移植工具。
 - **交付检查**：实际渲染修改页，核对整体节奏、内容、Notes、可编辑性和文件完整性。
@@ -50,7 +50,7 @@
 | [教学深度](references/teaching-depth.md) | 资料增补、页面与备注分工、时间安排 |
 | [参考基准与风格防漂移](references/reference-fidelity.md) | 满意样稿锁定、FDE 风格档案、代表页对照与漂移修复 |
 | [视觉系统](references/visual-system.md) | 配色、字号、网格与原生技术图 |
-| [ImageGen 工作流](references/imagegen-playbook.md) | 插画规划、提示词与复用原则 |
+| [ImageGen 工作流](references/imagegen-playbook.md) | 按内容生成插图、统一风格、生成记录与局部修订边界 |
 | [原生表格](references/native-tables.md) | 表格样式参数与主题陷阱 |
 | [编辑与交付](references/editing-and-delivery.md) | 局部保留、渲染与文件检查 |
 | [内容一致性与可靠导出](references/reliability.md) | 来源映射、重试恢复、二进制资源与内容验收 |
@@ -59,7 +59,7 @@
 | [表格样式保留工具](scripts/preserve_table_styles.py) | 只移植经过原生工具编辑的表格样式 |
 | [PPTX 文件与内容检查工具](scripts/validate_pptx.py) | 检查空媒体、关系、页序及声明的内容保留要求 |
 
-`assets/style-references/` 保留早期版本的参考图，用于风格分析；不将其作为新的插画复刻或对外使用。`assets/slide-examples/` 展示本次完成的课件布局，其中课程标题、时间与示例数字不构成通用模板要求。
+`assets/style-references/` 与 `assets/slide-examples/` 只用于风格和构图对照，不是固定插图库，也不能裁出其中的插画用于新课件。每次根据当前内容调用 ImageGen 生成所需插图。示例中的课程标题、时间与数字不构成通用模板要求。
 
 ## 可选工具与验证
 
